@@ -9,6 +9,8 @@
 [![Data: Xiaohongshu](https://img.shields.io/badge/Source-小红书-ff2442.svg)](#)
 [![Model: BERT](https://img.shields.io/badge/Model-BERT--base--chinese-blue.svg)](#)
 
+[中文版](README.md) | [English Version](README_EN.md)
+
 ---
 
 ## TL;DR
