@@ -1,0 +1,15 @@
+# 模型权重（太大，不上传）
+best_model_3class/
+my_bert/
+*.bin
+*.safetensors
+
+# 辅助文件
+node_modules/
+training.log
+create_docx.js
+package*.json
+*.docx
+.DS_Store
+__pycache__/
+*.pyc
