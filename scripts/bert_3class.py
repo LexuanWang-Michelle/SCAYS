@@ -28,10 +28,12 @@ import json
 from datetime import datetime
 
 # ============ 配置 ============
-DATA_DIR    = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.join(SCRIPT_DIR, "..")
+DATA_DIR    = os.path.join(PROJECT_DIR, "data")
 TRAIN_FILE  = os.path.join(DATA_DIR, "训练数据集.csv")
-MODEL_DIR   = os.path.join(DATA_DIR, "my_bert")       # 本地 BERT-base-Chinese
-OUTPUT_DIR  = os.path.join(DATA_DIR, "best_model_3class")
+MODEL_DIR   = os.path.join(PROJECT_DIR, "my_bert")       # 本地 BERT-base-Chinese
+OUTPUT_DIR  = os.path.join(PROJECT_DIR, "best_model_3class")
 
 # 超参数
 MAX_LEN    = 128
@@ -150,9 +152,9 @@ def train():
     texts  = df["Sentence"].astype(str).tolist()
     labels = df["label_3"].tolist()
 
-    tokenizer = BertTokenizer.from_pretrained(MODEL_DIR)
+    tokenizer = BertTokenizer.from_pretrained(MODEL_DIR, local_files_only=True)
     model = BertForSequenceClassification.from_pretrained(
-        MODEL_DIR, num_labels=3
+        MODEL_DIR, num_labels=3, local_files_only=True
     ).to(device)
 
     full_ds = TextDataset(texts, labels, tokenizer, MAX_LEN)
@@ -255,14 +257,14 @@ def train():
                 break
 
     # 保存训练历史
-    with open(os.path.join(DATA_DIR, "training_history_3class.json"), "w") as f:
+    with open(os.path.join(SCRIPT_DIR, "training_history_3class.json"), "w") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
 
     # 最终报告
     print("\n" + "=" * 55)
     print("最终模型评估（验证集）")
     print("=" * 55)
-    best = BertForSequenceClassification.from_pretrained(OUTPUT_DIR).to(device)
+    best = BertForSequenceClassification.from_pretrained(OUTPUT_DIR, local_files_only=True).to(device)
     best.eval()
     preds_all, true_all = [], []
     with torch.no_grad():
@@ -299,8 +301,8 @@ def predict(input_file: str):
     text_col = "Sentence" if "Sentence" in df.columns else "raw_text"
     texts = df[text_col].astype(str).tolist()
 
-    tokenizer = BertTokenizer.from_pretrained(OUTPUT_DIR)
-    model = BertForSequenceClassification.from_pretrained(OUTPUT_DIR).to(device)
+    tokenizer = BertTokenizer.from_pretrained(OUTPUT_DIR, local_files_only=True)
+    model = BertForSequenceClassification.from_pretrained(OUTPUT_DIR, local_files_only=True).to(device)
     model.eval()
 
     all_preds, all_probs = [], []
@@ -322,7 +324,7 @@ def predict(input_file: str):
     df["正面概率"]   = [round(p[2], 4) for p in all_probs]
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    out_file = os.path.join(DATA_DIR, f"预测结果_三分类_{timestamp}.csv")
+    out_file = os.path.join(SCRIPT_DIR, f"预测结果_三分类_{timestamp}.csv")
     df.to_csv(out_file, index=False, encoding="utf-8-sig")
 
     print(f"\n预测分布：")

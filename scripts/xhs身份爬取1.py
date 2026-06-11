@@ -3,17 +3,24 @@ import time
 import random
 import os
 import csv
+from datetime import date
 
 # ==========================================
 # 1. 配置区
 # ==========================================
 KEYWORDS = [
-    "体育生",  # 上次只爬了5条，补完
-    "学渣", "学霸", "卷王", "小透明", "班干部"
+    # 考试相关
+    # 日常场景
+    "晚自习", "早读", "跑操", "课间操", "拖堂", "占课", "大扫除",
+    # 纪律惩罚
+    "没收手机", "剪头发", "查宿舍", "请家长", "留堂", "写检讨", "全校通报",
+    # 学业压力
+    "补作业", "赶作业", "开学综合征", "补课",
 ]
 
-MAX_NOTES_PER_KEYWORD = 20
-OUTPUT_FILE = "/Users/yangchao/Desktop/ai/xhs_identity_corpus.csv"
+MAX_NOTES_PER_KEYWORD = 30
+# 每次爬取存独立文件，按日期命名
+OUTPUT_FILE = f"/Users/yangchao/Desktop/ai/xhs_identity_corpus_{date.today().strftime('%Y%m%d')}.csv"
 
 # 反检测时间参数
 MIN_BETWEEN_NOTES = 6
@@ -29,15 +36,23 @@ KEYWORD_REST_MAX = 70
 # 2. 工具函数
 # ==========================================
 def save_to_csv(data, filename=OUTPUT_FILE):
+    """每条评论单独一行保存"""
     file_exists = os.path.isfile(filename)
     with open(filename, mode='a', encoding='utf-8-sig', newline='') as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["Keyword", "Note_ID", "Title", "Content", "Comments"])
-        writer.writerow([
-            data.get('keyword', ''), data.get('note_id', ''),
-            data.get('title', ''), data.get('content', ''), data.get('comments', '')
-        ])
+            writer.writerow(["Keyword", "Note_ID", "Title", "Content", "Comment"])
+        kw = data.get('keyword', '')
+        note_id = data.get('note_id', '')
+        title = data.get('title', '')
+        content = data.get('content', '')
+        comments = data.get('comments_list', [])
+        if comments:
+            for comment in comments:
+                writer.writerow([kw, note_id, title, content, comment])
+        else:
+            # 无评论也保留一行
+            writer.writerow([kw, note_id, title, content, ''])
 
 
 def get_already_crawled_ids(filename=OUTPUT_FILE):
@@ -95,11 +110,50 @@ def extract_note_id(href):
     return None
 
 
+def find_first_target(page, already_processed_ids, already_crawled):
+    """从当前页面找到第一个可点击的未处理帖子（按视觉顺序：从上到下、从左到右）"""
+    cover_links = page.eles('css:a.cover')
+    if not cover_links:
+        cover_links = page.eles('css:a.title')
+    if not cover_links:
+        cover_links = page.eles('css:.feeds-page section a')
+
+    total_links = len(cover_links) if cover_links else 0
+
+    # 收集所有可用的候选帖子及其坐标
+    candidates = []
+    for el in cover_links:
+        try:
+            href = el.link
+            note_id = extract_note_id(href)
+            if not note_id:
+                continue
+            if note_id in already_processed_ids:
+                continue
+            if note_id in already_crawled:
+                already_processed_ids.add(note_id)
+                continue
+            w, h = el.rect.size
+            if w > 20 and h > 20:
+                x, y = el.rect.location
+                candidates.append((y, x, el, note_id))
+        except:
+            continue
+
+    if not candidates:
+        return None, None, total_links
+
+    # 按 y 坐标排序（y 相近的按 x 排序），实现从上到下、从左到右
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    _, _, best_el, best_id = candidates[0]
+    return best_el, best_id, total_links
+
+
 # ==========================================
 # 3. 核心爬虫
 # ==========================================
 def run_spider():
-    print("🚀 启动小红书身份语料爬虫（v3 - 适配新版页面结构）...")
+    print("🚀 启动小红书身份语料爬虫（v4 - 逐个查找可见帖子）...")
 
     already_crawled = get_already_crawled_ids()
     print(f"📋 已有 {len(already_crawled)} 条历史数据，将跳过重复帖子")
@@ -133,6 +187,10 @@ def run_spider():
             print(f"  ☕ 切换关键词，休息 {rest:.0f} 秒...")
             time.sleep(rest)
 
+        # 提示5秒，让用户手动筛选
+        print(f"  ⏳ 5秒后开始搜索，可手动操作筛选...")
+        time.sleep(5)
+
         search_url = f'https://www.xiaohongshu.com/search_result?keyword={kw}&source=web_search_result_notes'
         page.get(search_url)
         human_delay(5, 8)
@@ -146,54 +204,21 @@ def run_spider():
         scroll_attempts = 0
         max_scrolls = 30
         consecutive_fail = 0
+        no_target_consecutive = 0
 
         while notes_processed < MAX_NOTES_PER_KEYWORD and scroll_attempts < max_scrolls:
 
-            # ================================================
-            # 核心改动：用 css:a.cover 定位帖子封面链接
-            # 新版小红书搜索页：
-            #   <a class="cover" href="/search_result/NOTE_ID?xsec_token=...">
-            # ================================================
-            cover_links = page.eles('css:a.cover')
-
-            # 备选：如果 a.cover 找不到，用 a.title
-            if not cover_links:
-                cover_links = page.eles('css:a.title')
-
-            # 再备选：从 .feeds-page 里找
-            if not cover_links:
-                cover_links = page.eles('css:.feeds-page section a')
-
-            target_el = None
-            target_id = None
-
-            for el in cover_links:
-                try:
-                    href = el.link
-                    note_id = extract_note_id(href)
-
-                    if not note_id:
-                        continue
-                    if note_id in already_processed_ids:
-                        continue
-                    if note_id in already_crawled:
-                        already_processed_ids.add(note_id)
-                        continue
-
-                    # 确保元素有真实尺寸且可见
-                    w, h = el.rect.size
-                    if w > 20 and h > 20:
-                        target_el = el
-                        target_id = note_id
-                        break
-                except:
-                    continue
+            # 每次循环重新从页面找第一个可点击的未处理帖子
+            target_el, target_id, total_links = find_first_target(
+                page, already_processed_ids, already_crawled
+            )
 
             if target_el:
-                already_processed_ids.add(target_id)
+                no_target_consecutive = 0
                 scroll_attempts = 0
+                already_processed_ids.add(target_id)
 
-                print(f"  👆 点击帖子 [{target_id[:12]}...]")
+                print(f"  👆 点击帖子 [{target_id[:12]}...] (页面共{total_links}个)")
 
                 try:
                     tab_ids_before = page.tab_ids
@@ -264,23 +289,61 @@ def run_spider():
                         else:
                             break
 
-                    # 抓取评论
+                    # 抓取评论（含楼中楼回复）
                     comments = []
-                    comment_nodes = check_page.eles('.comment-item') or check_page.eles('css:.comment-inner')
+                    MAX_COMMENTS = 150
+
+                    # 第一步：滚动到评论区 + 加载更多评论
+                    for load_round in range(5):
+                        check_page.scroll.down(random.randint(300, 500))
+                        time.sleep(random.uniform(1.0, 1.8))
+                        try:
+                            more_btn = check_page.ele('text:共', timeout=0.8)
+                            if more_btn and '评论' in more_btn.text:
+                                pass
+                            more_btn = check_page.ele('text:查看更多', timeout=0.8)
+                            if more_btn:
+                                more_btn.click()
+                                time.sleep(random.uniform(1.5, 2.5))
+                        except:
+                            pass
+
+                    # 第二步：展开楼中楼回复
+                    for expand_round in range(3):
+                        clicked = 0
+                        try:
+                            reply_btns = check_page.eles('text:条回复') or []
+                            for btn in reply_btns:
+                                try:
+                                    btn.click()
+                                    clicked += 1
+                                    time.sleep(random.uniform(0.8, 1.5))
+                                except:
+                                    continue
+                        except:
+                            pass
+                        if clicked == 0:
+                            break
+                        time.sleep(random.uniform(1.0, 1.5))
+
+                    # 第三步：提取所有评论文本
+                    comment_nodes = check_page.eles('css:.comment-item') or check_page.eles('css:.comment-inner') or []
                     for node in comment_nodes:
                         try:
-                            c_text_node = node.ele('.content', timeout=0.5) or node.ele('css:.note-text', timeout=0.5)
+                            c_text_node = node.ele('.content', timeout=0.3) or node.ele('css:.note-text', timeout=0.3)
                             if c_text_node:
                                 c_text = c_text_node.text.strip()
-                                if c_text:
+                                if c_text and c_text not in comments and len(c_text) > 1:
                                     comments.append(c_text)
+                                    if len(comments) >= MAX_COMMENTS:
+                                        break
                         except:
                             continue
 
                     data = {
                         "keyword": kw, "note_id": target_id,
                         "title": title, "content": content,
-                        "comments": " | ".join(comments)
+                        "comments_list": comments
                     }
                     save_to_csv(data)
                     already_crawled.add(target_id)
@@ -331,8 +394,11 @@ def run_spider():
                     except:
                         pass
                     time.sleep(random.uniform(3, 6))
+
             else:
-                print(f"  📜 向下滚动加载更多... (已完成 {notes_processed} 篇)")
+                # 当前视口没有可爬的帖子，滚动加载更多
+                no_target_consecutive += 1
+                print(f"  📜 当前视口无新帖子(第{no_target_consecutive}次)，向下滚动... (已完成 {notes_processed} 篇)")
                 slow_scroll_down(page, times=random.randint(2, 3))
                 time.sleep(random.uniform(2, 4))
                 scroll_attempts += 1
