@@ -9,20 +9,23 @@ from datetime import date
 # 1. 配置区
 # ==========================================
 KEYWORDS = [
-    # --- 维度2：周期节律 - 最后3个 ---
-    "赶作业", "开学综合征", "补课",
+    # --- 维度3：关系场域 - 同学 ---
+    "被排挤", "没有朋友", "朋友背叛", "同学攀比",
+    # --- 维度3：关系场域 - 恋爱 ---
+    "分手",
 ]
 
 MAX_NOTES_PER_KEYWORD = 30
 OUTPUT_FILE = f"/Users/yangchao/Desktop/ai/xhs_corpus_v3_{date.today().strftime('%Y%m%d')}.csv"
 
-MIN_BETWEEN_NOTES = 6
-MAX_BETWEEN_NOTES = 14
-LONG_REST_EVERY = 5
-LONG_REST_MIN = 25
-LONG_REST_MAX = 50
-KEYWORD_REST_MIN = 35
-KEYWORD_REST_MAX = 70
+# 加快速度：缩短所有等待时间
+MIN_BETWEEN_NOTES = 3
+MAX_BETWEEN_NOTES = 8
+LONG_REST_EVERY = 8          # 每8篇才休息一次
+LONG_REST_MIN = 15
+LONG_REST_MAX = 30
+KEYWORD_REST_MIN = 20
+KEYWORD_REST_MAX = 40
 
 
 def save_to_csv(data, filename=OUTPUT_FILE):
@@ -82,32 +85,31 @@ def simulate_reading(page):
 
 
 def is_ad_post(title, content, comments):
-    """判断帖子是否为广告/营销帖"""
-    ad_patterns = [
-        '招生', '报名', '课程', '辅导班', '试听', '免费领', '资料分享',
-        '➕', '加v', '加微信', 'vx', '私信', '戳我', '扣我',
-        '限时', '名额', '优惠', '甩卖', '清仓', '下单',
-        '专业一对一', '名师', '保过', '包过', '提分', '签约',
-        '送资料', '免费资料', '电子版', '打印版',
-    ]
-    fb_patterns = [
-        '求推', '求分享', '怎么联系', '怎么报名', 'dd', '扣1',
-        '已私', '求拉', '怎么加', '拉我', '举手', '怎么买',
-        '私我', '私信我', '求链接',
-    ]
-
-    # 标题和正文检查
+    """判断帖子是否为广告/营销帖（加强版）"""
     text = (title + ' ' + content).lower()
+
+    # --- 硬广告词（仅检查标题和正文） ---
+    ad_patterns = [
+        # 教育培训类
+        '辅导班', '试听课', '免费领资料', '资料分享群',
+        '专业一对一', '名师辅导', '保过班', '包过',
+        '送资料', '免费资料包', '电子版资料', '网课推荐',
+        '夏令营招生', '集训营招生',
+        # 情感咨询/心理类（商业推广）
+        '情感咨询师', '心理疏导服务', '疗愈课程', '收费咨询',
+        # 引流/联系方式
+        '➕', '加微', '加vx', '私信获取', '私信发你', '私聊我',
+        '看我主页', '主页找我', '扣我',
+        # 商业/交易
+        '名额有限', '限时优惠', '下单立减', '招代理',
+    ]
     for pat in ad_patterns:
         if pat in text:
-            return True, f"标题/正文含广告词: {pat}"
+            return True, f"硬广告词: {pat}"
 
-    # 评论检查：如果大量评论都是"求推"类模式，说明是广告引流帖
-    if len(comments) >= 3:
-        fb_count = sum(1 for c in comments if any(p in c.lower() for p in fb_patterns))
-        ratio = fb_count / len(comments)
-        if ratio >= 0.4:  # 超过40%评论是求推类
-            return True, f"评论区{ratio:.0%}为求推/问联系方式"
+    # --- 标题引流判断 ---
+    if len(title) < 12 and ('💌' in title or '📩' in title or '📢' in title) and len(content) < 20:
+        return True, "短标题+引流符号+无正文"
 
     return False, ""
 
@@ -284,23 +286,33 @@ def run_spider():
                             break
 
                     comments = []
-                    MAX_COMMENTS = 150
+                    MAX_COMMENTS = 200
 
-                    for load_round in range(5):
-                        check_page.scroll.down(random.randint(300, 500))
-                        time.sleep(random.uniform(1.0, 1.8))
+                    # 加强版评论加载：滚动到评论区 + 多次加载 + 展开楼中楼
+                    # 先滚动到评论区
+                    for _ in range(3):
+                        check_page.scroll.down(random.randint(800, 1500))
+                        time.sleep(random.uniform(0.8, 1.5))
+
+                    # 多次加载更多评论
+                    for load_round in range(10):
+                        check_page.scroll.down(random.randint(500, 1000))
+                        time.sleep(random.uniform(0.6, 1.2))
                         try:
-                            more_btn = check_page.ele('text:共', timeout=0.8)
-                            if more_btn and '评论' in more_btn.text:
-                                pass
-                            more_btn = check_page.ele('text:查看更多', timeout=0.8)
+                            more_btn = check_page.ele('text:查看更多评论', timeout=0.5)
                             if more_btn:
                                 more_btn.click()
-                                time.sleep(random.uniform(1.5, 2.5))
+                                time.sleep(random.uniform(1.0, 2.0))
+                                continue
+                            more_btn = check_page.ele('text:展开更多', timeout=0.5)
+                            if more_btn:
+                                more_btn.click()
+                                time.sleep(random.uniform(1.0, 2.0))
                         except:
                             pass
 
-                    for expand_round in range(3):
+                    # 展开所有楼中楼回复
+                    for expand_round in range(5):
                         clicked = 0
                         try:
                             reply_btns = check_page.eles('text:条回复') or []
@@ -308,15 +320,16 @@ def run_spider():
                                 try:
                                     btn.click()
                                     clicked += 1
-                                    time.sleep(random.uniform(0.8, 1.5))
+                                    time.sleep(random.uniform(0.5, 1.0))
                                 except:
                                     continue
                         except:
                             pass
                         if clicked == 0:
                             break
-                        time.sleep(random.uniform(1.0, 1.5))
+                        time.sleep(random.uniform(0.5, 1.0))
 
+                    # 提取评论
                     comment_nodes = check_page.eles('css:.comment-item') or check_page.eles('css:.comment-inner') or []
                     for node in comment_nodes:
                         try:
