@@ -489,7 +489,7 @@ SCAYS/
 │   ├── event/                         #   维度2：周期节律 (25,632 条)
 │   │   ├── normal.csv                 #     显性情绪句子 (6,030 条)
 │   │   └── invisible_labeled.csv      #     隐含情绪标注 (19,602 条)
-│   ├── relationship/                  #   维度3：关系场域 (39,790 条) ⭐NEW
+│   ├── relationship/                  #   维度3：关系场域 (39,790 条)
 │   │   ├── normal.csv                 #     显性情绪句子 (13,470 条)
 │   │   ├── invisible_labeled.csv      #     隐含情绪标注 (26,320 条)
 │   │   └── 需人工审核.csv              #     低置信度待审核 (288 条)
@@ -503,9 +503,15 @@ SCAYS/
 │   ├── label_invisible.py             #   隐含情绪标注
 │   ├── merge_review.py                #   人工审核合并
 │   └── remove_usernames.py            #   用户名脱敏
+├── experiments/                       # 🔬 方法论验证实验
+│   ├── README.md                      #   实验说明
+│   ├── colander_full.py               #   Colander 标注质量审计
+│   ├── alchemist_experiment.py        #   AlCHEmist 多规则覆盖率实验
+│   ├── pruning_colander.py            #   Colander 数据剪枝对比实验
+│   ├── overlap_density.py             #   重叠密度分析
+│   └── alchemist_prompt.md            #   标注函数设计模板
 ├── README.md                          # 📝 项目说明（中文）
 ├── README_EN.md                       #   项目说明（English）
-├── SCAYS项目介绍.md                    #   项目详细介绍
 ├── requirements.txt                   # ⚙️ Python 依赖
 └── LICENSE                            #   CC BY-NC-SA 4.0
 ```
@@ -569,9 +575,9 @@ SCAYS 的构建融合了数据高效学习领域的最新研究成果，在采�
 
 - 识别出 **11.5%（8,469 条）** LLM 标注不可靠的数据
 - 定位了 LLM 的三大盲区：网络口语判定不一致、鼓励类句子误标、隐含情绪标签错误
-- 通过人工修正这些盲区数据，SCAYS 在大模型失败的场景上实现了更准确的标注
+- 正在针对这些盲区数据进行人工修正，提升标注质量
 
-**成果**：SCAYS 不只是"用大模型标注"——而是**发现大模型标不准的地方，用人工修正**。这使得用 SCAYS 训练的模型能够在 LLM 盲区上超越大模型本身。
+**成果**：SCAYS 不只是"用大模型标注"——而是**发现大模型标不准的地方，用人工修正**。这使得用 SCAYS 训练的模型有潜力在 LLM 盲区上超越大模型本身。
 
 ---
 
@@ -614,7 +620,7 @@ SCAYS 的构建融合了数据高效学习领域的最新研究成果，在采�
 | 论文 | 发表 | 在 SCAYS 中的应用 |
 |------|------|-------------------|
 | Burns et al., Weak-to-Strong Generalization | OpenAI 2023 | 弱到强泛化理论基础 |
-| [Sala et al., Weak-to-Strong (Data-Centric Lens)](https://arxiv.org/abs/2412.xxxxx) | ICLR 2025 | 重叠密度量化框架 |
+| [Sala et al., Weak-to-Strong (Data-Centric Lens)](https://arxiv.org/abs/2412.03881) | ICLR 2025 | 重叠密度量化框架 |
 | [Sala et al., The AlCHEmist](https://arxiv.org/abs/2407.11004) | NeurIPS 2024 | 程序化标注方法论参考 |
 | [Sala et al., Pearls from Pebbles](https://arxiv.org/abs/2404.16188) | NeurIPS 2024 | Colander 质量审计 + 数据剪枝 |
 | [Ming Li et al., Superfiltering](https://arxiv.org/abs/2402.00530) | ACL 2024 | 数据筛选策略参考 |
