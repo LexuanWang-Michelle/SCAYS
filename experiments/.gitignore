@@ -1,0 +1,7 @@
+# 实验输出文件（太大不上传，可通过运行脚本重新生成）
+colander_output/features.npy
+colander_output/predictions_bert.csv
+colander_output/all_confidence.csv
+colander_output/alchemist_results.csv
+colander_output/low_confidence_suspicious.csv
+pruning_output/
